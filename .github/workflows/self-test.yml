@@ -1,0 +1,39 @@
+name: Self test
+
+# The linter has to lint something, or a refactor can break every subject repo
+# at once without this repository noticing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Lint the examples
+        run: |
+          for d in examples/*/; do
+            echo "== $d"
+            python ws_parser.py "$d"
+          done
+
+      - name: A broken subject must fail
+        run: |
+          work=$(mktemp -d)
+          cp -r examples/minimal/. "$work/"
+          # An image that does not exist: the linter's job is to catch this
+          # before someone finds it as a hole in the page mid-workshop.
+          printf '\n![Manquante](img/absente.png)\n' >> "$work/main.md"
+          if python ws_parser.py "$work"; then
+            echo "linter accepted a missing image" >&2
+            exit 1
+          fi
+          echo "correctly rejected"

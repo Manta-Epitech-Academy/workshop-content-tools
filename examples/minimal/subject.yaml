@@ -1,0 +1,16 @@
+# The smallest valid subject: a manifest, an entrypoint, and one document with
+# one exercise. Everything else in the convention is optional.
+schema_version: "2.0"
+
+project:
+  name: "Exemple minimal"
+  slug: "exemple-minimal"
+  summary: "Le plus petit sujet valide, pour tester le linter."
+  entrypoint: "intro.md"
+
+platform:
+  points_default: 25
+
+documents:
+  - intro.md
+  - main.md

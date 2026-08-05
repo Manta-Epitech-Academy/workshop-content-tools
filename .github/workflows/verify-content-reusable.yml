@@ -1,0 +1,47 @@
+name: Verify content
+
+# Reusable linter for subject repos on convention 2.0. A subject repo calls it
+# with a three-line workflow of its own — see README.md.
+#
+# It runs the same parser the platform importer runs, so a repo that passes
+# here is a repo the platform can import.
+
+on:
+  workflow_call:
+    inputs:
+      subject-dir:
+        description: "Directory holding subject.yaml (repo root by default)"
+        type: string
+        default: "."
+      tools-ref:
+        description: "Ref of workshop-content-tools to lint with. Pin it for a session."
+        type: string
+        default: "main"
+      python-version:
+        type: string
+        default: "3.12"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      # No `repository:` — inside a reusable workflow this checks out the
+      # calling repo at the ref that triggered it, which is the subject.
+      - name: Check out the subject
+        uses: actions/checkout@v4
+
+      - name: Check out the linter
+        uses: actions/checkout@v4
+        with:
+          repository: kevin-cazal/workshop-content-tools
+          ref: ${{ inputs.tools-ref }}
+          path: .workshop-content-tools
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - run: pip install --disable-pip-version-check -r .workshop-content-tools/requirements.txt
+
+      - name: Lint the subject
+        run: python .workshop-content-tools/ws_parser.py "${{ inputs.subject-dir }}"
