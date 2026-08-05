@@ -142,6 +142,7 @@ Fields (all optional — an empty `<!-- ws: type: exercise -->` is a valid minim
 | `obs` | observable ids from `ref_comp` (`slug.N`) | none |
 | `topology` | on `type: chapter`: `linear` \| `free` | `linear` |
 | `requires` | explicit prerequisite ids, for cross-chapter gating | previous sibling (linear) / chapter entry (free) |
+| `optional` | on `type: exercise`: bonus work — unlocks with its neighbours, gates nothing, **counts towards nothing** | `false` |
 | `review` | instructor-led only: `non_blocking` \| `blocking` — whether an unreviewed submission gates progression (§3.5) | `non_blocking` |
 | `rewards` | open object for future extensions (badges, …) | none |
 
@@ -416,3 +417,49 @@ provision(workshop_repo_url, ref) / admin "Sync" (or webhook on session-free ins
 3. **Flags** — **decided: `flag_env`** field naming a secret the admin sets at sync time;
    flags never live in the (public) content repo.
 4. **Per-exercise `resume` mode override** — **deferred** until a real workshop needs it.
+
+### 3.11 Topologies, in practice
+
+A chapter is a scope for a topology, not a challenge — it never becomes one. A document that
+marks no chapter behaves as a single linear chapter, so content written before topologies
+existed keeps exactly the shape it had.
+
+```markdown
+# Gameplay
+<!-- ws: {type: chapter, topology: free} -->
+
+Choisir un ou plusieurs défis, dans l'ordre de son choix.
+
+## Sinusoïde
+<!-- ws: {type: exercise, id: sinusoide} -->
+```
+
+**`linear`** (default) chains the chapter's exercises: each one requires the previous.
+
+**`free`** gives every exercise of the chapter the same single prerequisite — the chapter's
+*entry*, meaning whatever preceded it. All of them open at once and may be done in any order.
+The workshop page renders them as a menu: none of them is "the current step", because naming one
+would impose the reading order the author explicitly refused.
+
+**What a free chapter unlocks in turn** is its own **closing step**. "Choose one or more" leaves
+no last exercise to hang the next chapter off, and CTFd's prerequisites are a plain AND-list
+with no "N of M". So the closing step gates on the chapter entry too, and acknowledging it is
+the participant saying *"I'm done here"*. The cost is that a free chapter can be skipped
+wholesale by closing it immediately — acceptable for optional creative work, so do not put a
+chapter that must be completed behind `topology: free`.
+
+**`optional: true`** marks bonus work. It unlocks like its neighbours and can be done at any
+point after that, but it **gates nothing** — the next step reaches past it — and it **counts
+towards nothing**. That second half is the one that matters: without it, a participant who skips
+the bonuses can never reach 100%, and 100% is what the closing rating step hangs off. An
+optional step is never "current" either, so the page never points at skippable work over the
+required step that follows it.
+
+**`requires`** overrides all of the above for one exercise: an explicit list of exercise ids,
+evaluated as AND. Use it for cross-chapter gating. Two rules:
+
+- Give every `requires` target an explicit `id:`. Ids are otherwise derived from headings, so a
+  reworded heading silently breaks the graph. The linter rejects a target that does not resolve,
+  and rejects cycles.
+- `requires` sets that exercise's own prerequisites only. It does not remove the exercise from
+  the chain, so the *next* exercise still gates on it unless it is `optional`.

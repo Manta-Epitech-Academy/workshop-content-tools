@@ -63,6 +63,22 @@ class Hint:
 
 
 @dataclass
+class Chapter:
+    """A `type: chapter` heading — the scope a topology applies to.
+
+    Chapters are not challenges and never become one. They exist so `topology`
+    has something to sit on: `linear` chains their exercises, `free` unlocks all
+    of them at once (CONTENT_CONVENTION §3.3). A document with no chapter marker
+    behaves as one implicit linear chapter, which is what every subject written
+    before topologies existed relies on.
+    """
+    slug: str
+    title: str
+    topology: str = "linear"
+    exercises: list = field(default_factory=list)   # slugs, in source order
+
+
+@dataclass
 class Exercise:
     slug: str
     title: str
@@ -75,6 +91,12 @@ class Exercise:
     quizzes: list = field(default_factory=list)
     meta: dict = field(default_factory=dict)   # raw ws fields (validation, review, ...)
     order: int = 0            # source-reading position across the whole subject
+    chapter: str = ""         # slug of the enclosing chapter ("" = document-level)
+    requires: list = field(default_factory=list)   # explicit prerequisite slugs
+    # Bonus work: unlocked like its neighbours, but it gates nothing and counts
+    # towards nothing. Without this a subject with optional steps can never
+    # reach 100%, and 100% is what gets the end-of-workshop feedback in.
+    optional: bool = False
 
 
 @dataclass
@@ -84,6 +106,7 @@ class Document:
     body_md: str          # full doc, ws markup stripped (for page rendering)
     exercises: list = field(default_factory=list)
     quizzes: list = field(default_factory=list)   # quizzes outside any exercise
+    chapters: list = field(default_factory=list)  # Chapter, in source order
     # Prose that follows the last exercise (bonus / "going further" / credits).
     # It is nobody's exercise context, so without this it would be dropped.
     trailing_md: str = ""
@@ -317,6 +340,29 @@ def _extract_inline(body, category, host_slug, defaults, where):
     return "\n".join(out).strip(), hints, quizzes
 
 
+TOPOLOGIES = ("linear", "free")
+
+
+def _topology_of(meta, where):
+    topology = meta.get("topology", "linear")
+    if topology not in TOPOLOGIES:
+        raise ParseError(f"{where}: topology {topology!r} is not one of "
+                         f"{', '.join(TOPOLOGIES)}")
+    return topology
+
+
+def _requires_of(meta, where):
+    """`requires` as a list of slugs. A bare string is accepted as one entry."""
+    raw = meta.get("requires")
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list) or not all(isinstance(r, str) for r in raw):
+        raise ParseError(f"{where}: requires must be a slug or a list of slugs")
+    return raw
+
+
 def parse_subject(subject_dir):
     subject_dir = Path(subject_dir)
     manifest = yaml.safe_load((subject_dir / "subject.yaml").read_text())
@@ -363,6 +409,11 @@ def parse_subject(subject_dir):
         # `### Concept` under a `## Étape` marked as an exercise is part of that
         # exercise, not prose that leaks into the next one's context.
         open_ex, open_level = None, 0
+        # The chapter exercises currently fall into. A document that marks none
+        # gets one implicit linear chapter, so nothing written before topologies
+        # existed changes shape. `open_chapter_level` closes it when a heading at
+        # the same depth or shallower arrives.
+        chapter, chapter_level = None, 0
 
         for level, title, meta, body in sections:
             node_type = (meta or {}).get("type", "prose" if level else None)
@@ -386,6 +437,10 @@ def parse_subject(subject_dir):
                 continue
             open_ex, open_level = None, 0
 
+            # A heading at the same depth or shallower ends the open chapter.
+            if chapter is not None and level and level <= chapter_level:
+                chapter, chapter_level = None, 0
+
             if node_type == "exercise":
                 clean, hints, quizzes = _extract_inline(
                     body, category, meta.get("id", ""), defaults, wtitle)
@@ -401,7 +456,12 @@ def parse_subject(subject_dir):
                     body_md=clean, context_md="\n\n".join(context_parts).strip(),
                     resume_md=resume, hints=hints, quizzes=quizzes, meta=meta,
                     order=order,
+                    chapter=chapter.slug if chapter else "",
+                    requires=_requires_of(meta, wtitle),
+                    optional=bool(meta.get("optional", False)),
                 )
+                if chapter is not None:
+                    chapter.exercises.append(slug)
                 for q in quizzes:      # hosted quizzes read right after the exercise body
                     q.host_exercise = slug
                     order += 1
@@ -421,6 +481,16 @@ def parse_subject(subject_dir):
                     order += 1
                     q.order = order
                 doc.quizzes.extend(quizzes)
+                if node_type == "chapter":
+                    chapter = Chapter(
+                        # Scoped by the document, not by the title above it: an
+                        # H1 chapter would otherwise slug as "<title>-<title>".
+                        slug=meta.get("id") or slugify(f"{Path(doc_path).stem}-{title}"),
+                        title=title,
+                        topology=_topology_of(meta, wtitle),
+                    )
+                    chapter_level = level
+                    doc.chapters.append(chapter)
                 if node_type in ("chapter", "prose") and level and level < 3:
                     category = title
                 heading = f"{'#' * level} {title}\n\n" if level else ""
@@ -477,6 +547,48 @@ def lint(subject_dir):
     for a in answers:
         if a not in [q.id for q in subject.quizzes]:
             problems.append(f"quiz_answers.yaml: {a!r} matches no quiz marker")
+    problems.extend(_lint_prerequisites(subject))
+    return problems
+
+
+def _lint_prerequisites(subject):
+    """`requires` targets resolve, and the graph they build has no cycle.
+
+    Slugs are derived from headings unless an explicit `id:` is set, so a
+    cross-chapter `requires` breaks silently the day somebody rewords a
+    heading. This is the check that makes it loud (CONTENT_CONVENTION §3.9).
+    """
+    problems = []
+    known = {e.slug: e for e in subject.exercises}
+    for ex in subject.exercises:
+        for target in ex.requires:
+            if target not in known:
+                problems.append(
+                    f"exercise {ex.slug!r}: requires {target!r}, which is not "
+                    f"an exercise in this subject")
+            elif target == ex.slug:
+                problems.append(f"exercise {ex.slug!r}: requires itself")
+
+    # Depth-first cycle detection over the explicit edges only. The implicit
+    # linear chain cannot cycle — it follows source order.
+    WHITE, GREY, BLACK = 0, 1, 2
+    colour = {s: WHITE for s in known}
+
+    def walk(slug, trail):
+        colour[slug] = GREY
+        for target in known[slug].requires:
+            if target not in known:
+                continue
+            if colour[target] == GREY:
+                cycle = " -> ".join(trail + [slug, target])
+                problems.append(f"requires cycle: {cycle}")
+            elif colour[target] == WHITE:
+                walk(target, trail + [slug])
+        colour[slug] = BLACK
+
+    for slug in known:
+        if colour[slug] == WHITE:
+            walk(slug, [])
     return problems
 
 
