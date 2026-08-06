@@ -137,7 +137,7 @@ Fields (all optional — an empty `<!-- ws: type: exercise -->` is a valid minim
 | `type` | `exercise` \| `chapter` \| `prose` | `prose` — **headings without a marker are plain prose**, which solves gotcha #5 explicitly |
 | `id` | stable slug for this node | slugified heading, scoped by parent slugs (`bullet/sprite`) — explicit `id` only needed when even the scoped slug collides; the linter enforces uniqueness |
 | `points` | reward on validation | `platform.points_default` |
-| `validation` | overrides `validation_default` | inherited |
+| `validation` | overrides `validation_default`: `checkpoint` \| `flag` (`tests`, `review` are specified, not implemented) | inherited |
 | `skills` | competency refs, slash notation `DOMAIN/SKILL/LEVEL` | none |
 | `obs` | observable ids from `ref_comp` (`slug.N`) | none |
 | `topology` | on `type: chapter`: `linear` \| `free` | `linear` |
@@ -174,6 +174,35 @@ after it. That is the answer to a real ambiguity: an explanatory heading and a p
 textually identical, so only the author can tell them apart — and now they can, in one line,
 without moving the heading or changing its level.
 
+
+### 3.3b What proves a step is done
+
+Two modes are implemented, and the difference is who knows the answer:
+
+- **`checkpoint`** (default) — the platform generates one code per exercise and writes the sheet
+  to `instructor_codes.<subject>.yaml`. The instructor reads a code out when they have seen the
+  work. Codes never rotate on a re-sync, so one already handed out stays valid.
+- **`flag`** — the answer *is* the flag, and the participant discovers it by doing the task. This
+  is how a CTF-shaped subject works (`shell1{cal -y}`). The platform must not overwrite it, so
+  those exercises get no generated code and no "ask the instructor" note.
+
+Authored answers live in a sidecar, never in the markdown — a flag printed next to its own
+exercise is not a flag:
+
+```yaml
+# flags.yaml, beside quiz_answers.yaml
+flags:
+  011_mkdir: "shell1{mkdir ok}"
+  003_arguments: {value: "shell1{cal -y}", case_insensitive: false}
+```
+
+Comparison is case-insensitive unless the entry says otherwise, which is what you want when the
+answer is a command or a path. The linter refuses a `validation: flag` exercise with no entry —
+it would import as a step nobody can solve — and an entry matching no exercise.
+
+**Protect the sidecar** the way the subject already protects its answers: a public repo should
+encrypt it (shell-1 keeps `flag.txt.gpg` and a `decrypt.sh`) or leave it out and supply it at
+sync time.
 
 ### 3.4 Instructor-led summary — marked region, visible content
 

@@ -91,7 +91,13 @@ class Exercise:
     resume_md: str        # instructor-led summary ("" if none)
     hints: list = field(default_factory=list)
     quizzes: list = field(default_factory=list)
-    meta: dict = field(default_factory=dict)   # raw ws fields (validation, review, ...)
+    meta: dict = field(default_factory=dict)   # raw ws fields (review, ...)
+    # How this step is validated (CONTENT_CONVENTION §3.2/§3.3):
+    #   checkpoint  the instructor reads out a per-exercise code (the default)
+    #   flag        the answer IS the flag, authored in flags.yaml — the
+    #               participant discovers it by doing the task
+    # `tests` and `review` are specified and not implemented.
+    validation: str = "checkpoint"
     order: int = 0            # source-reading position across the whole subject
     chapter: str = ""         # slug of the enclosing chapter ("" = document-level)
     requires: list = field(default_factory=list)   # explicit prerequisite slugs
@@ -343,6 +349,8 @@ def _extract_inline(body, category, host_slug, defaults, where):
 
 
 TOPOLOGIES = ("linear", "free")
+VALIDATIONS = ("checkpoint", "flag", "tests", "review")
+IMPLEMENTED_VALIDATIONS = ("checkpoint", "flag")
 
 
 def _topology_of(meta, where):
@@ -365,12 +373,23 @@ def _requires_of(meta, where):
     return raw
 
 
+def _validation_of(meta, defaults, where):
+    """What proves this step is done, falling back to the subject's default."""
+    value = meta.get("validation", defaults["validation"])
+    if value not in VALIDATIONS:
+        raise ParseError(f"{where}: validation {value!r} is not one of "
+                         f"{', '.join(VALIDATIONS)}")
+    return value
+
+
 def parse_subject(subject_dir):
     subject_dir = Path(subject_dir)
     manifest = yaml.safe_load((subject_dir / "subject.yaml").read_text())
     project = manifest["project"]
     defaults = {
         "points": manifest.get("platform", {}).get("points_default", 25),
+        "validation": manifest.get("platform", {}).get("validation_default",
+                                                       "checkpoint"),
     }
     subject = Subject(slug=project["slug"], name=project["name"], manifest=manifest)
 
@@ -461,6 +480,7 @@ def parse_subject(subject_dir):
                     chapter=chapter.slug if chapter else "",
                     requires=_requires_of(meta, wtitle),
                     optional=bool(meta.get("optional", False)),
+                    validation=_validation_of(meta, defaults, wtitle),
                 )
                 if chapter is not None:
                     chapter.exercises.append(slug)
@@ -530,6 +550,23 @@ def load_quiz_answers(subject_dir):
     return yaml.safe_load(path.read_text()).get("answers", {})
 
 
+def load_flags(subject_dir):
+    """Authored answers for `validation: flag` exercises, keyed by exercise id.
+
+    A sidecar rather than the markdown, for the obvious reason: a flag printed
+    next to its own exercise is not a flag. Same shape as quiz_answers.yaml, and
+    the same handling — a public subject repo encrypts or ignores it.
+
+        flags:
+          011_mkdir: "shell1{mkdir ok}"
+          019_livrable: {value: "shell1{...}", case_insensitive: false}
+    """
+    path = Path(subject_dir) / "flags.yaml"
+    if not path.exists():
+        return {}
+    return (yaml.safe_load(path.read_text()) or {}).get("flags", {})
+
+
 def lint(subject_dir):
     """Returns a list of problems; empty list = valid. Shared CI entrypoint."""
     problems = []
@@ -538,6 +575,19 @@ def lint(subject_dir):
     except (ParseError, KeyError, OSError, yaml.YAMLError) as e:
         return [str(e)]
     answers = load_quiz_answers(subject_dir)
+    flags = load_flags(subject_dir)
+    for ex in subject.exercises:
+        if ex.validation not in IMPLEMENTED_VALIDATIONS:
+            problems.append(f"exercise {ex.slug!r}: validation {ex.validation!r} is "
+                            f"specified but not implemented")
+        elif ex.validation == "flag" and not flags.get(ex.slug):
+            # The answer is the flag, so a missing one is not a small gap: the
+            # step would import with no way to solve it.
+            problems.append(f"exercise {ex.slug!r}: validation: flag, but no entry "
+                            f"in flags.yaml")
+    for slug in flags:
+        if slug not in {e.slug for e in subject.exercises}:
+            problems.append(f"flags.yaml: {slug!r} matches no exercise")
     for a in subject.assets:
         if not a.exists:
             problems.append(f"{a.documents[0]}: image {a.ref!r} does not exist")
