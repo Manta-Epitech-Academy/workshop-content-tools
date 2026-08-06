@@ -96,8 +96,13 @@ class Exercise:
     #   checkpoint  the instructor reads out a per-exercise code (the default)
     #   flag        the answer IS the flag, authored in flags.yaml — the
     #               participant discovers it by doing the task
+    #   token       the runtime reveals a token it derives from the session's
+    #               secret and `token_id`; the sync derives the same value
     # `tests` and `review` are specified and not implemented.
     validation: str = "checkpoint"
+    # `validation: token` only: the id the runtime derives its token from — the
+    # exercise's own id inside that runtime, not this subject's slug.
+    token_id: str = ""
     order: int = 0            # source-reading position across the whole subject
     chapter: str = ""         # slug of the enclosing chapter ("" = document-level)
     requires: list = field(default_factory=list)   # explicit prerequisite slugs
@@ -349,8 +354,8 @@ def _extract_inline(body, category, host_slug, defaults, where):
 
 
 TOPOLOGIES = ("linear", "free")
-VALIDATIONS = ("checkpoint", "flag", "tests", "review")
-IMPLEMENTED_VALIDATIONS = ("checkpoint", "flag")
+VALIDATIONS = ("checkpoint", "flag", "token", "tests", "review")
+IMPLEMENTED_VALIDATIONS = ("checkpoint", "flag", "token")
 
 
 def _topology_of(meta, where):
@@ -481,6 +486,7 @@ def parse_subject(subject_dir):
                     requires=_requires_of(meta, wtitle),
                     optional=bool(meta.get("optional", False)),
                     validation=_validation_of(meta, defaults, wtitle),
+                    token_id=str(meta.get("token_id", "")),
                 )
                 if chapter is not None:
                     chapter.exercises.append(slug)
@@ -580,6 +586,9 @@ def lint(subject_dir):
         if ex.validation not in IMPLEMENTED_VALIDATIONS:
             problems.append(f"exercise {ex.slug!r}: validation {ex.validation!r} is "
                             f"specified but not implemented")
+        elif ex.validation == "token" and not ex.token_id:
+            problems.append(f"exercise {ex.slug!r}: validation: token, but no "
+                            f"`token_id` for the runtime to derive it from")
         elif ex.validation == "flag" and not flags.get(ex.slug):
             # The answer is the flag, so a missing one is not a small gap: the
             # step would import with no way to solve it.

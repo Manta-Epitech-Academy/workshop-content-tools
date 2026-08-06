@@ -137,7 +137,8 @@ Fields (all optional — an empty `<!-- ws: type: exercise -->` is a valid minim
 | `type` | `exercise` \| `chapter` \| `prose` | `prose` — **headings without a marker are plain prose**, which solves gotcha #5 explicitly |
 | `id` | stable slug for this node | slugified heading, scoped by parent slugs (`bullet/sprite`) — explicit `id` only needed when even the scoped slug collides; the linter enforces uniqueness |
 | `points` | reward on validation | `platform.points_default` |
-| `validation` | overrides `validation_default`: `checkpoint` \| `flag` (`tests`, `review` are specified, not implemented) | inherited |
+| `validation` | overrides `validation_default`: `checkpoint` \| `flag` \| `token` (`tests`, `review` are specified, not implemented) | inherited |
+| `token_id` | `validation: token` only: the exercise's id **inside its runtime**, which is what the token is derived from | none |
 | `skills` | competency refs, slash notation `DOMAIN/SKILL/LEVEL` | none |
 | `obs` | observable ids from `ref_comp` (`slug.N`) | none |
 | `topology` | on `type: chapter`: `linear` \| `free` | `linear` |
@@ -185,6 +186,13 @@ Two modes are implemented, and the difference is who knows the answer:
 - **`flag`** — the answer *is* the flag, and the participant discovers it by doing the task. This
   is how a CTF-shaped subject works (`shell1{cal -y}`). The platform must not overwrite it, so
   those exercises get no generated code and no "ask the instructor" note.
+
+- **`token`** — the *runtime* reveals the answer. A runtime that grades its own exercises can
+  show a completion token derived from the exercise's `token_id` and a secret the platform mints
+  per instance; the importer derives the same value and sets it as the flag. Nothing is authored
+  and nothing is stored in the repo: rerunning the sync on another instance produces different
+  tokens, so answers do not leak between sessions. What it proves is that somebody got the tests
+  to pass in the normal flow — a client-side runtime cannot prove more than that.
 
 Authored answers live in a sidecar, never in the markdown — a flag printed next to its own
 exercise is not a flag:
