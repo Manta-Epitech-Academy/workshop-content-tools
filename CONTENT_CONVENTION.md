@@ -151,6 +151,30 @@ Writer freedom: heading levels are **not** prescribed. A chapter is whatever hea
 Everything between two markers belongs to the preceding node. A subject with zero markers is
 valid — it imports as a single read-only document (progression tracked per document).
 
+**Which headings name a part.** The exercises of a subject are grouped into *parts* (the
+challenge `category`, and the section headers of the workshop page). A part is opened by a
+chapter, or by any **unmarked** heading above level 3 — that is where every part of every
+existing subject comes from, and it stays that way.
+
+The exception is what `type: prose` is for. Writing it explicitly says *"a heading inside the
+current part"*, and such a heading no longer opens one:
+
+```markdown
+## Refactor du code            <- opens the part (unmarked)
+
+## Notion d'objet en Lua       <- explains something, mid-chapter
+<!-- ws: {type: prose} -->
+
+## Joueur                      <- still in "Refactor du code"
+<!-- ws: {type: exercise, id: refactor-joueur} -->
+```
+
+Without the marker, "Notion d'objet en Lua" would quietly rename the part for every exercise
+after it. That is the answer to a real ambiguity: an explanatory heading and a part heading are
+textually identical, so only the author can tell them apart — and now they can, in one line,
+without moving the heading or changing its level.
+
+
 ### 3.4 Instructor-led summary — marked region, visible content
 
 The short "consigne courte" for instructor-led mode is *content*, not metadata, so it may be

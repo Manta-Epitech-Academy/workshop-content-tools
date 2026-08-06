@@ -20,7 +20,9 @@ Conventions implemented here:
 - Prose content is not lost: each exercise carries `context_md`, the bodies of
   the prose/chapter nodes between the previous exercise and itself — so an
   imported exercise is self-sufficient reading (the Phase 0 lesson).
-- Exercise `category`: title of the nearest enclosing prose/chapter heading.
+- Exercise `category`: title of the nearest enclosing chapter or *unmarked*
+  heading. An explicit `type: prose` marker keeps a heading out of that
+  structure, so a mid-chapter explanation does not rename the part.
 - Quiz options: `- A. text` (single) / `* A. text` (multiple) /
   `- A. …` + `- a. …` rows (match), per workshop-metadata-tools QUIZ.md.
 """
@@ -491,7 +493,13 @@ def parse_subject(subject_dir):
                     )
                     chapter_level = level
                     doc.chapters.append(chapter)
-                if node_type in ("chapter", "prose") and level and level < 3:
+                # What opens a part: a chapter, or an *unmarked* heading. An
+                # explicit `type: prose` marker means "a heading inside the
+                # current part" — the only way to write a mid-chapter
+                # explanation without silently renaming the part around it
+                # (CONTENT_CONVENTION §3.3). Unmarked stays as it was, because
+                # that is where every existing subject's parts come from.
+                if level and level < 3 and (node_type == "chapter" or meta is None):
                     category = title
                 heading = f"{'#' * level} {title}\n\n" if level else ""
                 if clean or level:
