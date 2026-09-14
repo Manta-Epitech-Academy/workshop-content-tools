@@ -247,7 +247,7 @@ Two modes are implemented, and the difference is who knows the answer:
   to `instructor_codes.<subject>.yaml`. The instructor reads a code out when they have seen the
   work. Codes never rotate on a re-sync, so one already handed out stays valid.
 - **`flag`** — the answer *is* the flag, and the participant discovers it by doing the task. This
-  is how a CTF-shaped subject works (`shell1{cal -y}`). The platform must not overwrite it, so
+  is how a CTF-shaped subject works (`shell1{exemple}`). The platform must not overwrite it, so
   those exercises get no generated code and no "ask the instructor" note.
 
 - **`token`** — the *runtime* reveals the answer. A runtime that grades its own exercises can
@@ -264,7 +264,7 @@ exercise is not a flag:
 # flags.yaml, beside quiz_answers.yaml
 flags:
   011_mkdir: "shell1{mkdir ok}"
-  003_arguments: {value: "shell1{cal -y}", case_insensitive: false}
+  003_arguments: {value: "shell1{exemple}", case_insensitive: false}
 ```
 
 Comparison is case-insensitive unless the entry says otherwise, which is what you want when the
