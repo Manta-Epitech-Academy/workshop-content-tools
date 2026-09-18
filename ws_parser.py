@@ -32,7 +32,14 @@ from pathlib import Path
 
 import yaml
 
-WS_COMMENT = re.compile(r"<!--\s*ws:(?!resume)(.*?)-->", re.DOTALL)
+# Regions fenced by an opening and a closing comment, rather than metadata
+# attached to a heading. They carry content the platform lifts out and renders
+# elsewhere — the author's short version above the statement, the toolbox and
+# the glossary on the toolbox page — so the marker is a name, not a YAML
+# mapping, and the metadata parser has to keep its hands off it.
+FENCED_REGIONS = ("resume", "toolbox", "glossary")
+WS_COMMENT = re.compile(
+    r"<!--\s*ws:(?!(?:%s)\b)(.*?)-->" % "|".join(FENCED_REGIONS), re.DOTALL)
 RESUME_OPEN = "<!-- ws:resume -->"
 RESUME_CLOSE = "<!-- /ws:resume -->"
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
@@ -438,8 +445,8 @@ def _extract_inline(body, category, host_slug, defaults, where):
 
 
 TOPOLOGIES = ("linear", "free")
-VALIDATIONS = ("checkpoint", "flag", "token", "tests", "review")
-IMPLEMENTED_VALIDATIONS = ("checkpoint", "flag", "token")
+VALIDATIONS = ("checkpoint", "quiz", "flag", "token", "tests", "review")
+IMPLEMENTED_VALIDATIONS = ("checkpoint", "quiz", "flag", "token")
 
 
 def _topology_of(meta, where):
@@ -775,6 +782,22 @@ def _lint_problems(subject_dir):
         return [str(e)], None
     answers = load_quiz_answers(subject_dir)
     flags = load_flags(subject_dir)
+    # The importer resolves `project.entrypoint` against these documents to build
+    # the index page and the opening step, and it does so after the images have
+    # been uploaded — in a workshop, after the earlier subjects have been
+    # imported whole. Checked here it costs a lint run instead of an instance in
+    # a state nobody asked for. Nothing else checks the pairing: every other
+    # check reads one document on its own.
+    entry = (subject.manifest.get("project") or {}).get("entrypoint")
+    declared = [d.path for d in subject.documents]
+    if not entry:
+        problems.append("subject.yaml: no `project.entrypoint`. It names the "
+                        "document a participant reads first, which becomes the "
+                        "front page and the first step.")
+    elif entry not in declared:
+        problems.append(f"subject.yaml: `project.entrypoint` is {entry!r}, which is "
+                        f"not one of `documents:` "
+                        f"({', '.join(declared) or 'none'})")
     for ex in subject.exercises:
         if ex.validation not in IMPLEMENTED_VALIDATIONS:
             problems.append(f"exercise {ex.slug!r}: validation {ex.validation!r} is "
@@ -782,6 +805,11 @@ def _lint_problems(subject_dir):
         elif ex.validation == "token" and not ex.token_id:
             problems.append(f"exercise {ex.slug!r}: validation: token, but no "
                             f"`token_id` for the runtime to derive it from")
+        elif ex.validation == "quiz" and not ex.quizzes:
+            # The questions ARE the answer, so a step with none could never be
+            # solved — and it would import as a control with nothing in it.
+            problems.append(f"exercise {ex.slug!r}: validation: quiz, but the step "
+                            f"hosts no `type: quiz` marker")
         elif ex.validation == "flag" and not flags.get(ex.slug):
             # The answer is the flag, so a missing one is not a small gap: the
             # step would import with no way to solve it.

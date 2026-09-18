@@ -1,9 +1,12 @@
-# Workshop content convention 2.0
+# Workshop content convention — proposal
 
-The format a **subject repo** uses so a workshop platform can import it: what the manifest holds,
-how structure is derived from the markdown, and what the linter checks. Implemented by
-`ws_parser.py` in this repository, which is the same parser the importer runs — so what CI
-accepts, the platform imports, by construction.
+Status: implemented. **Published**, without the references to this repository's private design
+docs, at [kevin-cazal/workshop-content-tools](https://github.com/kevin-cazal/workshop-content-tools),
+together with `ws_parser.py` and a reusable GitHub Actions workflow subject repos call.
+
+That published `ws_parser.py` and `tools/ws_parser.py` here must stay identical — it is what makes
+"what CI accepts, the platform imports" true rather than aspirational. `tools/check_parser_sync.py`
+fails when they drift.
 
 Builds on the existing implementation:
 [`pypong_new`](https://github.com/Manta-Epitech-Academy/pypong_new) (example workshop),
@@ -49,7 +52,7 @@ What breaks in practice (change):
    blockquote line on GitHub — exactly the kind of artifact the requirements forbid.
 4. **No platform fields.** Nothing carries points/rewards, workshop mode
    (self-serve / instructor-led), workspace kind, validation kind, or chapter topology
-   (linear vs free-choice) — all needed by the platform.
+   (linear vs free-choice) — all needed by the platform (PLAN.md §9).
 5. **"Which heading is an exercise" is implicit** (title starts with "Exercice…"?). The
    Notion-era gotcha — prose-only headings mixed with real steps — has no explicit answer.
 
@@ -59,13 +62,13 @@ the TOC instead of authoring it.
 
 ## 3. The convention
 
-### 3.0 Terminology
+### 3.0 Terminology (aligned with CLAUDE.md)
 
 | Term | Definition | Materialized as |
 |---|---|---|
 | **Subject** | One coherent content unit (PyPong, Santa Shooter, …). What `pypong_new` and earlier drafts called a "workshop". | **One git repo** with `subject.yaml` + md |
 | **Workshop** | A composition of subjects: one **starter** (always done first) plus zero or more **advanced** subjects, ordered or free-choice. | A **workshop repo** with `workshop.yaml` (§4.1) — or a single subject repo deployed directly (implicit one-subject workshop) |
-| **Session** | A workshop done at some place, at some moment, by identified people (usually instructor-led). A CTFd instance can also be **session-free**: anyone, anytime, self-serve. | **One CTFd instance** |
+| **Session** | A workshop done at some place, at some moment, by identified people (usually instructor-led). A CTFd instance can also be **session-free**: anyone, anytime, self-serve. | **One CTFd instance** (see PLAN.md §10) |
 
 ### 3.1 Repo layout (one subject = one repo)
 
@@ -98,7 +101,7 @@ runtime:
   language: "python"        # Monaco language id
 
 platform:
-  mode_default: self_serve  # self_serve | instructor_led — admin can override per session
+  mode_default: instructor_led  # self_serve | instructor_led — the instance decides (§3.6)
   validation_default: checkpoint   # checkpoint | tests | flag | review
   points_default: 25        # per exercise, when not overridden
 
@@ -200,7 +203,7 @@ Fields (all optional — an empty `<!-- ws: type: exercise -->` is a valid minim
 | `type` | `exercise` \| `chapter` \| `prose` | `prose` — **headings without a marker are plain prose**, which solves gotcha #5 explicitly |
 | `id` | stable slug for this node | slugified heading, scoped by parent slugs (`bullet/sprite`) — explicit `id` only needed when even the scoped slug collides; the linter enforces uniqueness |
 | `points` | reward on validation | `platform.points_default` |
-| `validation` | overrides `validation_default`: `checkpoint` \| `flag` \| `token` (`tests`, `review` are specified, not implemented) | inherited |
+| `validation` | overrides `validation_default`: `checkpoint` \| `flag` \| `token` \| `quiz` (`tests`, `review` are specified, not implemented) | inherited |
 | `token_id` | `validation: token` only: the exercise's id **inside its runtime**, which is what the token is derived from | none |
 | `skills` | competency refs, slash notation `DOMAIN/SKILL/LEVEL` | none |
 | `obs` | observable ids from `ref_comp` (`slug.N`) | none |
@@ -238,14 +241,17 @@ after it. That is the answer to a real ambiguity: an explanatory heading and a p
 textually identical, so only the author can tell them apart — and now they can, in one line,
 without moving the heading or changing its level.
 
-
 ### 3.3b What proves a step is done
 
-Two modes are implemented, and the difference is who knows the answer:
+Four modes are implemented, and the difference is who knows the answer:
 
-- **`checkpoint`** (default) — the platform generates one code per exercise and writes the sheet
-  to `instructor_codes.<subject>.yaml`. The instructor reads a code out when they have seen the
-  work. Codes never rotate on a re-sync, so one already handed out stays valid.
+- **`checkpoint`** (default) — somebody has to say the work is done. The platform generates one
+  code per exercise and writes the sheet to `instructor_codes.<subject>.yaml`; the instructor
+  reads a code out when they have seen the work. Codes never rotate on a re-sync, so one already
+  handed out stays valid. **In a self-serve instance there is nobody to ask**, so the same step
+  offers a button instead and the participant validates it themselves — the code stays stored,
+  unrevealed, so the instance can be switched back (PLAN.md §25.4). The author writes
+  `checkpoint` either way: which of the two happens is the instance's setting, not the content's.
 - **`flag`** — the answer *is* the flag, and the participant discovers it by doing the task. This
   is how a CTF-shaped subject works (`shell1{exemple}`). The platform must not overwrite it, so
   those exercises get no generated code and no "ask the instructor" note.
@@ -256,6 +262,19 @@ Two modes are implemented, and the difference is who knows the answer:
   and nothing is stored in the repo: rerunning the sync on another instance produces different
   tokens, so answers do not leak between sessions. What it proves is that somebody got the tests
   to pass in the normal flow — a client-side runtime cannot prove more than that.
+
+- **`quiz`** — the step's own questions are the proof. The `type: quiz` blocks the exercise
+  hosts (§3.7) become its control: the participant answers them all, submits once, and the
+  step is solved when every answer is right. Answers come from `quiz_answers.yaml`, like any
+  quiz. A wrong submission names the questions to look at again (« revois les questions 1
+  et 3 »), never the right answer. No instructor is involved, which is what makes it the right
+  mode for the first steps of a subject, where the work is reading and the room may have
+  nobody to hand out a code. The linter refuses a `validation: quiz` exercise that hosts no
+  quiz marker: it would import as a control with nothing in it.
+
+  Weigh it before using it on a step whose answer is worth guessing: naming the wrong
+  questions lets a participant solve each one on its own rather than the set as a product,
+  and a « 3 réponses sur 4 » question has only four combinations.
 
 Authored answers live in a sidecar, never in the markdown — a flag printed next to its own
 exercise is not a flag:
@@ -275,10 +294,10 @@ it would import as a step nobody can solve — and an entry matching no exercise
 encrypt it (shell-1 keeps `flag.txt.gpg` and a `decrypt.sh`) or leave it out and supply it at
 sync time.
 
-### 3.4 Instructor-led summary — marked region, visible content
+### 3.4 The short version — marked region, shown as a summary
 
-The short "consigne courte" for instructor-led mode is *content*, not metadata, so it may be
-visible on GitHub. Invisible region markers select it:
+The short "consigne courte" is *content*, not metadata, so it may be visible on GitHub.
+Invisible region markers select it:
 
 ```markdown
 <!-- ws:resume -->
@@ -287,9 +306,58 @@ visible on GitHub. Invisible region markers select it:
 <!-- /ws:resume -->
 ```
 
-Self-serve mode renders the whole section; instructor-led renders only the `resume` region
-(fallback when absent: the full section — degrades gracefully). On GitHub the bullets render
-as a normal part of the doc.
+The platform renders it **in both modes**, as a foldable "In short" box above the statement —
+a summary, never a replacement. On GitHub the bullets render as a normal part of the doc.
+
+> Changed 2026-08-25 (PLAN.md §25.7). This region used to be specified as a *swap*:
+> instructor-led would render only the bullets and self-serve the full prose. That is the
+> same shape as the bug fixed in §24 — a step whose statement says "reuse the code above"
+> needs the code above to be on the page, and the participant sitting in a room is the one
+> most likely to be pointed at it. Nothing is withheld by the mode any more.
+
+### 3.4b Reference material — toolbox and glossary, gathered on one page
+
+Two more invisible regions, same grammar as `ws:resume`. They mark the parts of a step that are
+**reference**, not work:
+
+```markdown
+<!-- ws:toolbox -->
+### Boîte à outils
+
+> 🧰 **Outil #1 : `not` « L'inverse de »**
+> ...
+<!-- /ws:toolbox -->
+
+<!-- ws:glossary -->
+## Ce que le jeu te donne
+| Terme | Signification |
+| --- | --- |
+| `me.X` `me.Y` | Position du fantôme (X,Y), en cases |
+<!-- /ws:glossary -->
+```
+
+The author keeps writing each one **beside the step that needs it** — that is where it is
+understood, and the markers do not change how the subject reads on GitHub. The platform lifts
+both out and shows them on `/toolbox`, a page of its own in the navbar, in reading order. The
+step keeps a line in the same position naming what was there, and linking to it:
+
+> 🧰 Les outils de cette étape : `if / then / end`, `not`. Ouvrir la boîte à outils
+
+Two things this buys. A step no longer opens with half a screen of reference before the work
+starts; and a tool met at step 2 is still reachable at step 7, where scrolling back through five
+steps to re-read it is how a participant loses their place.
+
+**Gated like everything else.** A section is open exactly when its step is: the toolbox page
+shows the name of a locked step and nothing else, the same contract the workshop page keeps for
+locked step titles. The page therefore has the same shape from the first minute, which is what
+lets it answer "is there anything more coming".
+
+The tool names on the step line are **derived** from the `🧰`/`🗺️` titles the author already
+wrote (`Outil #N :` and the gloss after « are dropped), so there is no second list to maintain.
+
+A subject that marks nothing keeps the old behaviour: every section renders inside its step, and
+the toolbox page says it is empty. A platform that does not know these markers renders them as
+the invisible comments they are.
 
 ### 3.5 Instructor-led review flow
 
@@ -314,6 +382,29 @@ happen in one gesture.
 Auto-checkable validations (`tests`, `flag`, quizzes §3.7) still auto-check in instructor-led
 mode; their result is attached to the submission so the instructor reviews outcomes, not
 syntax.
+
+### 3.5b The instance's mode — instructor-led or self-serve
+
+The same subject serves a room with an instructor and somebody working alone at home. Which one
+an instance is, is **the instance's setting and not the content's**: `workshop_mode` in CTFd's
+config, flipped at `/admin/workshop/settings` or set at provisioning from
+`deploy/instances.yaml`. One instance, one mode (PLAN.md §25.3).
+
+`platform.mode_default` in `subject.yaml` is what provisioning falls back to when the manifest
+says nothing. Precedence: `instances.yaml` `mode:` > `platform.mode_default` > `instructor_led`.
+
+What changes with it, in full:
+
+| | instructor-led | self-serve |
+|---|---|---|
+| a `checkpoint` step | asks for the code the instructor reads out | one button, self-validated |
+| the note under the control | "ask the instructor for the validation code" | "nobody checks this for you" |
+| registration (at provisioning) | a shared code | open |
+| the review flow of §3.5 | applies | nothing to review |
+
+What does **not**: the order of the steps, what gates what, points, hints, the short version of
+§3.4, `flag` and `token` answers (they already prove themselves), and every solve already
+recorded. Flipping the mode changes what a step asks for, and nothing else.
 
 ### 3.6 Hints — native `<details>`, optional cost
 
@@ -354,7 +445,7 @@ at the subject repo root, keyed by quiz id, imported server-side at sync — opt
 encrypted (age/sops) with a deploy-time key when lookup-ability matters (same trust model as
 `flag_env`).
 
-Each quiz imports as a **CTFd challenge of type `quiz`**: single/multiple/match
+Each quiz imports as a **CTFd challenge of type `quiz`** (PLAN.md §12): single/multiple/match
 auto-grade in `attempt()`; `freeform` auto-grades against a **regular expression** (or list —
 any match wins) stored as its `quiz_answers.yaml` entry, case-insensitive by default. CI
 compiles every regex so a broken pattern fails the build.
@@ -382,7 +473,7 @@ guarantees. It is pinned by the same `ref` as the text that surrounds it (§4.1)
 session at a tag gets the illustrations that text was written against. It survives the repo being
 renamed, moved or made private. And it needs no network beyond the CTFd instance itself — which
 matters, because a room is expected to serve from its own deployment rather than the public
-internet: runtimes are served from the session's own deployment.
+internet (PLAN.md §14.4).
 
 A hotlinked URL has none of that. It points at a branch head, so an image can change under a
 pinned session; it breaks when the source repo is renamed or made private; and it makes every
@@ -433,7 +524,7 @@ the same parser library** — what CI accepts, the platform imports, by construc
 repo is enough to run the associated CTFd instance — `provision(repo_url, ref)` is the whole
 interface. Only three things stay outside the repo, on purpose:
 
-- **mode** (self-serve / instructor-led) — configured manually per instance for now
+- **mode** (self-serve / instructor-led) — an instance setting since PLAN.md §25 (§3.5b)
 - **secrets** (`flag_env` values) — never in a public repo
 - **attendees** — session-specific by nature
 
@@ -459,12 +550,37 @@ instance:                  # optional CTFd setup values; provisioner defaults ot
   scoreboard: hidden       # visible | hidden
 ```
 
+**Vendored form.** A platform that vendors its content (as `content/<subject>` does) names
+directories instead of repos, and the importer accepts either:
+
+```yaml
+subjects:
+  - path: ../../pypong        # relative to workshop.yaml
+    role: starter
+  - path: ../../santa_shooter
+    role: advanced
+    order: 1
+```
+
+`repo` + `ref` is what the **admin sync page** reads (PLAN.md §26): the instance fetches each
+subject from GitHub at that ref. `path` is what the command line reads from an already-vendored
+tree. A manifest may carry both, and `kevin-cazal/discover-linux_subjects` does — the subjects are
+git submodules, so `path` is the submodule directory a `--recursive` clone gives you and `repo`
+is where the instance fetches the same thing from.
+
+**`ref: submodule`** means "the commit this workshop repo pins for that subject", which is what a
+clone of the wrapper checks out. The platform reads the pin from GitHub's contents API rather than
+from git, because a repository tarball carries submodule directories empty. The alternative is a
+branch (`ref: main`, always that subject's tip — one push while a subject is being rewritten) or a
+tag or sha (frozen for a session). The trade is worth stating: with `submodule`, pushing to the
+subject repo changes nothing until the wrapper's pin is bumped and pushed too.
+
 **Single-subject shortcut:** most workshops are one subject. A subject repo is directly
 deployable — the provisioner treats `subject.yaml` as an implicit one-subject workshop
 (`role: starter`, instance defaults). A separate workshop repo is only needed to compose
 several subjects or override instance settings.
 
-Gating rule: **the starter must always be completed before any advanced
+Gating rule (from CLAUDE.md): **the starter must always be completed before any advanced
 subject.** At import, every advanced subject's entry challenges get the starter's final
 exercise(s) as CTFd prerequisites. Ordered advanced subjects chain the same way; unordered
 ones all hang off the starter.
@@ -526,7 +642,7 @@ provision(workshop_repo_url, ref) / admin "Sync" (or webhook on session-free ins
 1. `pypong_new`: mechanical — `metadata.yaml` loses its `toc` (titles already match headings,
    a script emits the `ws:` comments from the existing toc + observables), quiz markers move
    into comments, "- Indice" lists become `<details>` hints.
-2. Notion workshops: export to md (or pull via the public API), then add
+2. Notion workshops: export to md (or pull via the public API — see PLAN.md §9), then add
    markers. The Étape/Tutoriel/Mise-en-pratique structure maps directly.
 3. `ref_comp` unchanged — same slash notation, same observables files.
 4. `workshop-metadata-tools`: schema 2.0, drop `toc` + `check_toc.py`, add the comment parser
