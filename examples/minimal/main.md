@@ -12,7 +12,9 @@ contexte à la première.
 
 ### Ce qu'il faut faire
 
-Écrire quelque chose.
+1. Ouvrir le runtime.
+   <!-- ws:cue runtime -->
+2. Écrire quelque chose.
 
 <!-- ws: {type: hint} -->
 <details><summary>Si tu es bloqué</summary>
