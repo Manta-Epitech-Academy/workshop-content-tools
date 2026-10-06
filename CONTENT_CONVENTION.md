@@ -352,8 +352,22 @@ shows the name of a locked step and nothing else, the same contract the workshop
 locked step titles. The page therefore has the same shape from the first minute, which is what
 lets it answer "is there anything more coming".
 
-The tool names on the step line are **derived** from the `🧰`/`🗺️` titles the author already
-wrote (`Outil #N :` and the gloss after « are dropped), so there is no second list to maintain.
+**What is a tool, and what is its name.** Each quoted block (`>` lines, separated by a blank
+line) inside the region is one tool. Its names are what its **first line** says in backticks —
+`` `not` `` above, `` `and` `` in « Opérateur logique `and` », both `` `for` `` and `` `while` ``
+in « une boucle `for` ou `while` » — or, when that line has no code, its bold title without the
+number and the gloss: « empiler une deuxième règle » is its own name.
+The `🧰`/`🗺️` emoji and « Outil #N : » are decoration: welcome, never required. A quote whose
+first line has neither backticks nor a bold title is a note inside the box and names nothing.
+Two titles in one quote count as one tool; a blank line between them makes two. The lint says so
+in both cases. There is no second list to maintain.
+
+> Changed 2026-10-06. A tool used to be *« a bold title preceded by 🧰 or 🗺️ »*, with the
+> emoji itself as the marker. A marker nobody can see is a bad marker: it does not survive a
+> copy-paste that drops the character, it cannot be found by an author who does not already
+> know to look for it, and it puts a rendering decision inside a reader-facing title. The
+> block is now the unit, exactly what `ws:toolbox` already fences, and the emoji stays as
+> decoration for anyone who likes it.
 
 A subject that marks nothing keeps the old behaviour: every section renders inside its step, and
 the toolbox page says it is empty. A platform that does not know these markers renders them as
@@ -667,6 +681,42 @@ subject from GitHub at that ref. `path` is what the command line reads from an a
 tree. A manifest may carry both, and `kevin-cazal/discover-linux_subjects` does — the subjects are
 git submodules, so `path` is the submodule directory a `--recursive` clone gives you and `repo`
 is where the instance fetches the same thing from.
+
+**A subject the workshop repo owns.** An entry with a `path` and no `repo` is a directory of the
+workshop repo itself, fetched with it. It is meant for a **one-step starter**: a subject that is
+nothing but its entrypoint document, a few lines saying what the workshop offers.
+
+```yaml
+subjects:
+  - path: accueil            # accueil/subject.yaml + accueil/intro.md, in this repo
+    role: starter
+  - repo: kevin-cazal/pypong_subject
+    ref: submodule
+    role: advanced           # no `order`: free choice
+  - repo: kevin-cazal/luapong_subject
+    ref: submodule
+    role: advanced
+```
+
+Such a starter imports as a single `ack` step, shown on the workshop's index above the cards. It
+has no exercise, so it gets no closing step: no rating, no "going further". The advanced subjects
+wait on that acknowledgement, and the index labels unordered ones "your pick" rather than "next".
+
+**`after:` — a subject that waits on several others.** `order` chains subjects one behind the
+other, and an unordered subject waits on the starter alone. Neither says "once both of these are
+done", which is what a bonus needs:
+
+```yaml
+  - path: jspong
+    role: advanced
+    after: [pypong, luapong]   # `project.slug` of the subjects to finish first
+```
+
+The subject's introduction then requires the closing step of every subject named. `after`
+replaces `order`, cannot sit on the starter, and must name subjects listed above it. On the
+index such a subject is labelled "next", and a lock message names the subject a blocking step
+belongs to ("PyPong > Pour aller plus loin"), since twin subjects end on steps with the same
+title.
 
 **`ref: submodule`** means "the commit this workshop repo pins for that subject", which is what a
 clone of the wrapper checks out. The platform reads the pin from GitHub's contents API rather than
