@@ -50,7 +50,9 @@ def render(subject):
     if hints:
         parts.append(plural(hints, "indice"))
     if subject.assets:
-        parts.append(plural(len(subject.assets), "image"))
+        parts.append(plural(len(subject.images), "image"))
+    if subject.scenes:
+        parts.append(plural(len(subject.scenes), "scène") + " 3D")
     out += [", ".join(parts) + ".", ""]
     return "\n".join(out)
 
