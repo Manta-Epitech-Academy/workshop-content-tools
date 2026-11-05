@@ -294,7 +294,9 @@ it would import as a step nobody can solve — and an entry matching no exercise
 
 **Protect the sidecar** the way the subject already protects its answers: a public repo should
 encrypt it (shell-1 keeps `flag.txt.gpg` and a `decrypt.sh`) or leave it out and supply it at
-sync time.
+sync time. When the repo holds only `flags.yaml.gpg`, the linter cannot read the
+answers: it accepts the flag steps and says in a warning that they were not checked. Decrypt
+`flags.yaml` and lint again before a sync, which checks them in full.
 
 ### 3.4 The short version — marked region, shown as a summary
 
