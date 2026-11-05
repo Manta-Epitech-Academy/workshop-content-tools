@@ -53,6 +53,8 @@ def render(subject):
         parts.append(plural(len(subject.images), "image"))
     if subject.scenes:
         parts.append(plural(len(subject.scenes), "scène") + " 3D")
+    if subject.attachments:
+        parts.append(plural(len(subject.attachments), "fichier") + " à télécharger")
     out += [", ".join(parts) + ".", ""]
     return "\n".join(out)
 

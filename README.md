@@ -49,7 +49,8 @@ python3 generate_readme.py path/to/subject --check    # for CI
 
 The linter reports missing quiz answers, unparseable regexes, quiz answers matching no marker,
 duplicate exercise ids across the whole subject, and referenced images that do not exist, and
-the 3D scenes that stand in for stills (`ws:scene`, §3.8b): the marker, its file and its options.
+the 3D scenes that stand in for stills (`ws:scene`, §3.8b): the marker, its file and its options,
+and the files to download linked from the prose (§3.8c): a missing one is refused, a big one reported.
 
 ## What a subject looks like
 
@@ -60,6 +61,7 @@ my-subject/
 ├── main.md             # content, any number of files
 ├── quiz_answers.yaml   # answers, kept out of the documents
 ├── img/…               # images, referenced relative to the document
+├── fichiers/…          # files to download, linked relative to the document (§3.8c)
 └── README.md           # GENERATED
 ```
 
